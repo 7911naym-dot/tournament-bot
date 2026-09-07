@@ -103,11 +103,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
-    # Таблица в моноширинном формате без лишних пробелов
     table += "<code>"
-    # Заголовки: Игры, Выиграно, Ничья, Проиграно, Забито, Пропущено, Разница, Очки
-    table += "Команда И  В  Н  П  З  П  ±  О\n"
-    table += "─────────────────────────────────\n"
+    # Заголовки: Команда И В Н П З П ± О
+    table += "Команда И В Н П З П ± О\n"
+    table += "────────────────────────\n"
     
     for i, (team, stats) in enumerate(sorted_teams):
         diff = stats['goals_for'] - stats['goals_against']
@@ -116,18 +115,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             diff_str = str(diff)
         
-        # Сокращаем название до 5 символов (без точек)
         team_short = team[:5]
         
-        # Выравнивание: название 7 символов, числа по 2 символа с пробелом
-        table += f"{team_short:<7} {stats['matches']:>2}  {stats['wins']:>2}  {stats['draws']:>2}  {stats['losses']:>2}  {stats['goals_for']:>2}  {stats['goals_against']:>2}  {diff_str:>2}  {stats['points']:>2}\n"
+        # ТОЛЬКО ОДИН ПРОБЕЛ МЕЖДУ КОЛОНКАМИ!
+        table += f"{team_short:<7} {stats['matches']:>2} {stats['wins']:>2} {stats['draws']:>2} {stats['losses']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>2} {stats['points']:>2}\n"
     
     table += "</code>"
     
     played = len(get_played_matches())
     total = len(SCHEDULE)
     table += f"\n📊 Сыграно: <b>{played}/{total}</b>"
-    table += "\n\n⚽ <i>/add_result</i>  |  📅 <i>/schedule</i>"
+    table += "\n\n⚽ <i>/add_result</i> | 📅 <i>/schedule</i>"
     
     await update.message.reply_text(table, parse_mode='HTML')
 
