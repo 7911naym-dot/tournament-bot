@@ -109,8 +109,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                          key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     
     # Создаём заголовок
-    table = "🏆 <b>ТУРНИРНАЯ ТАБЛИЦА</b>\n"
-    table += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
     # Добавляем шапку таблицы (короткие названия колонок для телефона)
     table += "<code>"
