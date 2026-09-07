@@ -103,9 +103,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
+    # Фиксированная ширина для моноширинного отображения
     table += "<code>"
-    table += "Команда  И О З П  ± В Н П\n"
-    table += "───────────────────────\n"
+    table += "Команда  И  О  З  П  ±  В  Н  П\n"
+    table += "──────────────────────────────────\n"
     
     for i, (team, stats) in enumerate(sorted_teams):
         diff = stats['goals_for'] - stats['goals_against']
@@ -126,9 +127,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             diff_str = str(diff)
         
-        team_short = team[:5]
+        team_short = team[:5]  # 5 символов
         
-        table += f"{medal} {team_short:<6} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>3} {stats['wins']:>2} {stats['draws']:>2} {stats['losses']:>2}\n"
+        # Строгое выравнивание: название 7 символов, числа по 2 символа
+        table += f"{medal}{team_short:<5}  {stats['matches']:>2}  {stats['points']:>2}  {stats['goals_for']:>2}  {stats['goals_against']:>2}  {diff_str:>2}  {stats['wins']:>2}  {stats['draws']:>2}  {stats['losses']:>2}\n"
     
     table += "</code>"
     
@@ -172,8 +174,6 @@ async def add_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not unplayed:
         await update.message.reply_text("🎉 Все матчи сыграны! Турнир завершён!")
         return ConversationHandler.END
-    
-    # ИСПРАВЛЕНО: KeyboardButton вместо ReplyKeyboardButton
     buttons = [[KeyboardButton(text=f"ТУР {t}: {t1} — {t2}")] for t, t1, t2 in unplayed]
     keyboard = ReplyKeyboardMarkup(buttons, resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text("📋 Выберите матч:", reply_markup=keyboard)
