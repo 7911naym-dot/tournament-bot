@@ -2,29 +2,26 @@ import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher, types
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
-from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.types import Message, FSInputFile
+from aiogram.dispatcher import Dispatcher
+from aiogram.dispatcher.filters import Command
+from aiogram.dispatcher.fsm.context import FSMContext
+from aiogram.dispatcher.fsm.state import StatesGroup, State
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 import csv
 import io
 
 # --- НАСТРОЙКА: ВСТАВЬТЕ СВОЙ ТОКЕН ---
-BOT_TOKEN = "8821624488:AAGEWgFk1PJro7Va1Ipz1LS1Pt08eQAhjaM"  # ← ЗАМЕНИТЕ НА СВОЙ ТОКЕН
+BOT_TOKEN = "8821624488:AAGEWgFk1PJro7Va1Ipz1LS1Pt08eQAhjaM"
 # --- НАСТРОЙКА ЗАВЕРШЕНА ---
 
-# Включаем логирование
 logging.basicConfig(level=logging.INFO)
 
-# Инициализируем бота и диспетчера
-storage = MemoryStorage()
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-dp = Dispatcher(storage=storage)
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(bot)
+dp.middleware.setup(LoggingMiddleware())
 
-# --- РАСПИСАНИЕ ТУРНИРА ---
 TEAMS = ["Белые", "Красные", "Фиолетовые", "Зелёные", "Черные"]
 
 SCHEDULE = [
@@ -51,7 +48,6 @@ SCHEDULE = [
 ]
 
 match_results = {}
-# --- КОНЕЦ РАСПИСАНИЯ ---
 
 class ResultStates(StatesGroup):
     waiting_for_match = State()
@@ -98,7 +94,7 @@ def get_unplayed_matches():
             unplayed.append((tour, team1, team2))
     return unplayed
 
-@dp.message(Command("start"))
+@dp.message_handler(Command("start"))
 async def show_table(message: Message):
     recalculate_stats()
     output = io.StringIO()
@@ -119,7 +115,7 @@ async def show_table(message: Message):
     await message.answer_document(FSInputFile('table.csv'), caption=caption)
     os.remove('table.csv')
 
-@dp.message(Command("add_result"))
+@dp.message_handler(Command("add_result"))
 async def ask_match(message: Message, state: FSMContext):
     unplayed = get_unplayed_matches()
     if not unplayed:
@@ -132,7 +128,7 @@ async def ask_match(message: Message, state: FSMContext):
     await message.answer("📋 Выберите матч для записи результата:", reply_markup=keyboard)
     await state.set_state(ResultStates.waiting_for_match)
 
-@dp.message(Command("schedule"))
+@dp.message_handler(Command("schedule"))
 async def show_schedule(message: Message):
     text = "📅 РАСПИСАНИЕ ТУРНИРА\n\n"
     current_tour = 0
@@ -150,9 +146,9 @@ async def show_schedule(message: Message):
             text += f"   • {team1} — {team2} ⏳\n"
     await message.answer(text)
 
-@dp.message(Command("reset"))
+@dp.message_handler(Command("reset"))
 async def reset_data(message: Message):
-    admin_id = 7911  # ← ВСТАВЬТЕ СВОЙ TELEGRAM ID
+    admin_id = 7911
     if message.from_user.id != admin_id:
         await message.answer("⛔ У вас нет прав для этой команды.")
         return
@@ -186,7 +182,7 @@ def recalculate_stats():
             tournament_data[team1]['draws'] += 1
             tournament_data[team2]['draws'] += 1
 
-@dp.message(ResultStates.waiting_for_match)
+@dp.message_handler(state=ResultStates.waiting_for_match)
 async def process_match_selection(message: Message, state: FSMContext):
     selected_text = message.text
     match_found = False
@@ -213,7 +209,7 @@ async def process_match_selection(message: Message, state: FSMContext):
     if not match_found:
         await message.answer("❌ Пожалуйста, выберите матч из списка, используя кнопки.")
 
-@dp.message(ResultStates.waiting_for_goals)
+@dp.message_handler(state=ResultStates.waiting_for_goals)
 async def process_goals(message: Message, state: FSMContext):
     try:
         goals = message.text.split(':')
@@ -238,8 +234,6 @@ async def process_goals(message: Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Неверный формат! Пожалуйста, введите счёт в формате X:Y, например, 2:1")
 
-async def main():
-    await dp.start_polling(bot)
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    from aiogram import executor
+    executor.start_polling(dp, skip_updates=True)
