@@ -7,7 +7,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardR
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ВАШ ТОКЕН
+BOT_TOKEN = "НОВЫЙ_ТОКЕН_ОТ_BOTFATHER"  # ВСТАВЬТЕ НОВЫЙ ТОКЕН
 ADMIN_ID = 159790549  # ВАШ TELEGRAM ID
 # --- КОНЕЦ НАСТРОЙКИ ---
 
@@ -108,13 +108,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_teams = sorted(tournament_data.items(), 
                          key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     
-    # Создаём заголовок
+    # Заголовок
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
-    # Добавляем шапку таблицы (короткие названия колонок для телефона)
+    # Шапка таблицы (адаптивная, компактная)
     table += "<code>"
-    table += f"{'Команда':<10} {'И':<2} {'О':<2} {'З':<2} {'П':<2} {'±':<2} {'В':<1} {'Н':<1} {'П':<1}\n"
-    table += "─────────────────────────────────\n"
+    table += f"{'#':<2} {'Команда':<8} {'И':<2} {'О':<2} {'З':<2} {'П':<2} {'±':<3} {'В':<1} {'Н':<1} {'П':<1}\n"
+    table += "─────────────────────────────────────\n"
     
     # Добавляем каждую команду
     for i, (team, stats) in enumerate(sorted_teams):
@@ -128,13 +128,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif i == 2:
             medal = "🥉"
         elif i == 3:
-            medal = "🍔"  # 4-е место — гамбургер
+            medal = "🍔"
         else:
-            medal = "🦴"  # 5-е место — кость
+            medal = "🦴"
         
-        # Обрезаем название до 8 символов, если длинное
+        # Знак + перед положительной разницей
+        if diff > 0:
+            diff_str = f"+{diff}"
+        else:
+            diff_str = str(diff)
+        
+        # Обрезаем название до 8 символов
         team_short = team[:8] if len(team) > 8 else team
-        table += f"{medal} {team_short:<8} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff:>3} {stats['wins']:>1} {stats['draws']:>1} {stats['losses']:>1}\n"
+        
+        # Формируем строку
+        table += f"{medal} {team_short:<8} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>3} {stats['wins']:>1} {stats['draws']:>1} {stats['losses']:>1}\n"
+        
+        # Разделитель после лидера
+        if i == 0:
+            table += "─────────────────────────────────────\n"
     
     table += "</code>"
     
@@ -143,8 +155,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total = len(SCHEDULE)
     table += f"\n📊 Сыграно: <b>{played}/{total}</b>"
     
-    # Добавляем красивый футер
+    # Футер
     table += "\n\n⚽ <i>Записать результат: /add_result</i>"
+    table += "\n📅 <i>Расписание: /schedule</i>"
     
     await update.message.reply_text(table, parse_mode='HTML')
 
