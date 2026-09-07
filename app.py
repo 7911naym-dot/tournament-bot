@@ -101,54 +101,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_teams = sorted(tournament_data.items(), 
                          key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     
-    # Заголовок смайлами (вне таблицы)
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
-    # Строго моноширинная таблица. Убираем смайлики из таблицы, используем только номера.
+    # Таблица в моноширинном формате без лишних пробелов
     table += "<code>"
-    table += "  Команда  И  О  З  П  ±  В  Н  П\n"
-    table += "──────────────────────────────────────\n"
-    
-    # Медали выносим за пределы моноширинного блока, чтобы не сломать верстку
-    medals = []
+    # Заголовки: Игры, Выиграно, Ничья, Проиграно, Забито, Пропущено, Разница, Очки
+    table += "Команда И  В  Н  П  З  П  ±  О\n"
+    table += "─────────────────────────────────\n"
     
     for i, (team, stats) in enumerate(sorted_teams):
-        # Определяем медаль
-        if i == 0:
-            medal = "🥇"
-        elif i == 1:
-            medal = "🥈"
-        elif i == 2:
-            medal = "🥉"
-        elif i == 3:
-            medal = "🍔"
-        else:
-            medal = "🦴"
-        medals.append(medal)
-        
         diff = stats['goals_for'] - stats['goals_against']
         if diff > 0:
             diff_str = f"+{diff}"
         else:
             diff_str = str(diff)
         
-        # Название строго 7 символов (обрезаем или дополняем пробелами)
-        team_display = team[:7]
-        if len(team_display) < 7:
-            team_display = team_display + " " * (7 - len(team_display))
+        # Сокращаем название до 5 символов (без точек)
+        team_short = team[:5]
         
-        # Формируем строку. Все числа строго по правому краю (2 символа)
-        table += f"  {team_display} {stats['matches']:>2}  {stats['points']:>2}  {stats['goals_for']:>2}  {stats['goals_against']:>2}  {diff_str:>3}  {stats['wins']:>2}  {stats['draws']:>2}  {stats['losses']:>2}\n"
+        # Выравнивание: название 7 символов, числа по 2 символа с пробелом
+        table += f"{team_short:<7} {stats['matches']:>2}  {stats['wins']:>2}  {stats['draws']:>2}  {stats['losses']:>2}  {stats['goals_for']:>2}  {stats['goals_against']:>2}  {diff_str:>2}  {stats['points']:>2}\n"
     
     table += "</code>"
     
-    # Добавляем медали отдельным списком под таблицей, чтобы не ломать колонки
-    medal_line = "🏅 Медали: " + " | ".join([f"{medals[i]} {team[:5]}" for i, (team, _) in enumerate(sorted_teams)])
-    
     played = len(get_played_matches())
     total = len(SCHEDULE)
-    table += f"\n{medal_line}"
-    table += f"\n\n📊 Сыграно: <b>{played}/{total}</b>"
+    table += f"\n📊 Сыграно: <b>{played}/{total}</b>"
     table += "\n\n⚽ <i>/add_result</i>  |  📅 <i>/schedule</i>"
     
     await update.message.reply_text(table, parse_mode='HTML')
