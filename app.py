@@ -101,10 +101,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_teams = sorted(tournament_data.items(), 
                          key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     
-    # Формируем таблицу в виде компактного текста
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
-    # Шапка
     table += "<code>"
     table += "Команда  И О З П  ± В Н П\n"
     table += "───────────────────────\n"
@@ -112,7 +110,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, (team, stats) in enumerate(sorted_teams):
         diff = stats['goals_for'] - stats['goals_against']
         
-        # Смайлы для мест
         if i == 0:
             medal = "🥇"
         elif i == 1:
@@ -124,13 +121,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             medal = "🦴"
         
-        # Знак + перед положительной разницей
         if diff > 0:
             diff_str = f"+{diff}"
         else:
             diff_str = str(diff)
         
-        # Сокращаем название до 5 символов (без точек)
         team_short = team[:5]
         
         table += f"{medal} {team_short:<6} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>3} {stats['wins']:>2} {stats['draws']:>2} {stats['losses']:>2}\n"
@@ -177,7 +172,9 @@ async def add_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not unplayed:
         await update.message.reply_text("🎉 Все матчи сыграны! Турнир завершён!")
         return ConversationHandler.END
-    buttons = [[ReplyKeyboardButton(text=f"ТУР {t}: {t1} — {t2}")] for t, t1, t2 in unplayed]
+    
+    # ИСПРАВЛЕНО: KeyboardButton вместо ReplyKeyboardButton
+    buttons = [[KeyboardButton(text=f"ТУР {t}: {t1} — {t2}")] for t, t1, t2 in unplayed]
     keyboard = ReplyKeyboardMarkup(buttons, resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text("📋 Выберите матч:", reply_markup=keyboard)
     return WAITING_FOR_MATCH
