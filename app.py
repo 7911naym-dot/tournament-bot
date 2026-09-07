@@ -1,31 +1,22 @@
 import logging
-import os
 import csv
 import io
-from aiogram import Bot, Dispatcher, types
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
-from aiogram.types import Message, InputFile
-from aiogram.dispatcher import Dispatcher
-from aiogram.dispatcher.filters import Command
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from aiogram.utils.executor import start_polling
+import os
+from datetime import datetime
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"
-ADMIN_ID = 159790549
+BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ВАШ ТОКЕН
+ADMIN_ID = 159790549  # ВАШ TELEGRAM ID
 # --- КОНЕЦ НАСТРОЙКИ ---
 
 logging.basicConfig(level=logging.INFO)
 
-storage = MemoryStorage()
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot, storage=storage)
-dp.middleware.setup(LoggingMiddleware())
+# Состояния разговора
+WAITING_FOR_MATCH, WAITING_FOR_GOALS = range(2)
 
-# Команды
+# Данные турнира
 TEAMS = ["Белые", "Красные", "Фиолетовые", "Зелёные", "Черные"]
 
 SCHEDULE = [
@@ -52,25 +43,19 @@ SCHEDULE = [
 ]
 
 match_results = {}
-
-class ResultStates(StatesGroup):
-    waiting_for_match = State()
-    waiting_for_goals = State()
-
 tournament_data = {}
 
 def init_teams():
     for team in TEAMS:
-        if team not in tournament_data:
-            tournament_data[team] = {
-                "goals_for": 0,
-                "goals_against": 0,
-                "points": 0,
-                "matches": 0,
-                "wins": 0,
-                "draws": 0,
-                "losses": 0
-            }
+        tournament_data[team] = {
+            "goals_for": 0,
+            "goals_against": 0,
+            "points": 0,
+            "matches": 0,
+            "wins": 0,
+            "draws": 0,
+            "losses": 0
+        }
 init_teams()
 
 def get_resting_team(tour):
@@ -84,31 +69,15 @@ def get_resting_team(tour):
             return team
     return None
 
-def get_played_matches():
-    played = []
-    for tour, team1, team2 in SCHEDULE:
-        if (tour, team1, team2) in match_results:
-            played.append((tour, team1, team2))
-    return played
-
 def get_unplayed_matches():
-    unplayed = []
-    for tour, team1, team2 in SCHEDULE:
-        if (tour, team1, team2) not in match_results:
-            unplayed.append((tour, team1, team2))
-    return unplayed
+    return [(t, t1, t2) for t, t1, t2 in SCHEDULE if (t, t1, t2) not in match_results]
+
+def get_played_matches():
+    return [(t, t1, t2) for t, t1, t2 in SCHEDULE if (t, t1, t2) in match_results]
 
 def recalculate_stats():
     for team in TEAMS:
-        tournament_data[team] = {
-            "goals_for": 0,
-            "goals_against": 0,
-            "points": 0,
-            "matches": 0,
-            "wins": 0,
-            "draws": 0,
-            "losses": 0
-        }
+        tournament_data[team] = {"goals_for": 0, "goals_against": 0, "points": 0, "matches": 0, "wins": 0, "draws": 0, "losses": 0}
     for (tour, team1, team2), (g1, g2) in match_results.items():
         tournament_data[team1]['goals_for'] += g1
         tournament_data[team1]['goals_against'] += g2
@@ -130,18 +99,17 @@ def recalculate_stats():
             tournament_data[team1]['draws'] += 1
             tournament_data[team2]['draws'] += 1
 
-@dp.message_handler(Command("start"))
-async def show_table(message: Message):
+# --- КОМАНДЫ БОТА ---
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     recalculate_stats()
     output = io.StringIO()
     writer = csv.writer(output, delimiter=';')
     writer.writerow(["Команда", "Игры", "Очки", "Забито", "Пропущено", "Разница", "В", "Н", "П"])
-    sorted_teams = sorted(tournament_data.items(), 
-                         key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
+    sorted_teams = sorted(tournament_data.items(), key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     for team, stats in sorted_teams:
         diff = stats['goals_for'] - stats['goals_against']
-        writer.writerow([team, stats['matches'], stats['points'], stats['goals_for'], stats['goals_against'], 
-                        diff, stats['wins'], stats['draws'], stats['losses']])
+        writer.writerow([team, stats['matches'], stats['points'], stats['goals_for'], stats['goals_against'], diff, stats['wins'], stats['draws'], stats['losses']])
     csv_content = output.getvalue()
     output.close()
     with open('table.csv', 'w', encoding='utf-8-sig') as f:
@@ -149,24 +117,10 @@ async def show_table(message: Message):
     played = len(get_played_matches())
     total = len(SCHEDULE)
     caption = f"📊 ТУРНИРНАЯ ТАБЛИЦА\nСыграно матчей: {played}/{total}"
-    await message.answer_document(InputFile('table.csv'), caption=caption)
+    await update.message.reply_document(document=open('table.csv', 'rb'), filename='table.csv', caption=caption)
     os.remove('table.csv')
 
-@dp.message_handler(Command("add_result"))
-async def ask_match(message: Message, state: FSMContext):
-    unplayed = get_unplayed_matches()
-    if not unplayed:
-        await message.answer("🎉 ПОЗДРАВЛЯЮ! Все матчи уже сыграны! Турнир завершён!")
-        return
-    buttons = []
-    for tour, team1, team2 in unplayed:
-        buttons.append([KeyboardButton(text=f"ТУР {tour}: {team1} — {team2}")])
-    keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-    await message.answer("📋 Выберите матч для записи результата:", reply_markup=keyboard)
-    await state.set_state(ResultStates.waiting_for_match)
-
-@dp.message_handler(Command("schedule"))
-async def show_schedule(message: Message):
+async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📅 РАСПИСАНИЕ ТУРНИРА\n\n"
     current_tour = 0
     for tour, team1, team2 in SCHEDULE:
@@ -181,100 +135,102 @@ async def show_schedule(message: Message):
             text += f"   • {team1} — {team2} {g1}-{g2} ✅\n"
         else:
             text += f"   • {team1} — {team2} ⏳\n"
-    await message.answer(text)
+    await update.message.reply_text(text)
 
-@dp.message_handler(Command("reset"))
-async def reset_data(message: Message):
-    if message.from_user.id != ADMIN_ID:
-        await message.answer("⛔ У вас нет прав для этой команды.")
-        return
-    global tournament_data, match_results
-    match_results = {}
-    for team in TEAMS:
-        tournament_data[team] = {
-            "goals_for": 0,
-            "goals_against": 0,
-            "points": 0,
-            "matches": 0,
-            "wins": 0,
-            "draws": 0,
-            "losses": 0
-        }
-    await message.answer("🔄 Все данные сброшены!")
+async def add_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    unplayed = get_unplayed_matches()
+    if not unplayed:
+        await update.message.reply_text("🎉 Все матчи сыграны! Турнир завершён!")
+        return ConversationHandler.END
+    buttons = [[KeyboardButton(text=f"ТУР {t}: {t1} — {t2}")] for t, t1, t2 in unplayed]
+    keyboard = ReplyKeyboardMarkup(buttons, resize_keyboard=True, one_time_keyboard=True)
+    await update.message.reply_text("📋 Выберите матч:", reply_markup=keyboard)
+    return WAITING_FOR_MATCH
 
-@dp.message_handler(Command("help"))
-async def help_command(message: Message):
-    text = """
-🤖 **Команды бота:**
-
-/start - показать турнирную таблицу
-/schedule - показать расписание всех матчей
-/add_result - записать результат матча
-/reset - сбросить все данные (только для админа)
-/help - показать это сообщение
-
-📝 **Как записать результат:**
-1. Нажмите /add_result
-2. Выберите матч из списка
-3. Введите счёт в формате X:Y (например, 2:1)
-"""
-    await message.answer(text)
-
-@dp.message_handler(state=ResultStates.waiting_for_match)
-async def process_match_selection(message: Message, state: FSMContext):
-    selected_text = message.text
-    match_found = False
+async def handle_match(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
     try:
-        parts = selected_text.split(": ")
-        tour_part = parts[0].replace("ТУР ", "")
-        tour = int(tour_part)
-        teams_part = parts[1].split(" — ")
-        team1 = teams_part[0].strip()
-        team2 = teams_part[1].strip()
-        for t, t1, t2 in SCHEDULE:
-            if t == tour and t1 == team1 and t2 == team2:
-                if (tour, team1, team2) not in match_results:
-                    await state.update_data(tour=tour, team1=team1, team2=team2)
-                    await message.answer(
-                        f"✅ Введите счёт для матча {team1} — {team2} в формате: X:Y (например, 2:1)",
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                    await state.set_state(ResultStates.waiting_for_goals)
-                    match_found = True
-                else:
-                    await message.answer("❌ Этот матч уже сыгран!")
-                    match_found = True
-                break
+        parts = text.split(": ")
+        tour = int(parts[0].replace("ТУР ", ""))
+        teams = parts[1].split(" — ")
+        team1, team2 = teams[0].strip(), teams[1].strip()
+        if (tour, team1, team2) in match_results:
+            await update.message.reply_text("❌ Этот матч уже сыгран!")
+            return WAITING_FOR_MATCH
+        context.user_data['tour'] = tour
+        context.user_data['team1'] = team1
+        context.user_data['team2'] = team2
+        await update.message.reply_text(f"✅ Введите счёт {team1} — {team2} (X:Y)", reply_markup=ReplyKeyboardRemove())
+        return WAITING_FOR_GOALS
     except:
-        pass
-    if not match_found:
-        await message.answer("❌ Пожалуйста, выберите матч из списка, используя кнопки.")
+        await update.message.reply_text("❌ Выберите матч из списка!")
+        return WAITING_FOR_MATCH
 
-@dp.message_handler(state=ResultStates.waiting_for_goals)
-async def process_goals(message: Message, state: FSMContext):
+async def handle_goals(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        goals = message.text.split(':')
-        if len(goals) != 2:
-            raise ValueError("Неверный формат. Используйте X:Y")
-        g1 = int(goals[0])
-        g2 = int(goals[1])
-        data = await state.get_data()
-        tour = data['tour']
-        team1 = data['team1']
-        team2 = data['team2']
+        g1, g2 = map(int, update.message.text.split(':'))
+        tour = context.user_data['tour']
+        team1 = context.user_data['team1']
+        team2 = context.user_data['team2']
         match_results[(tour, team1, team2)] = (g1, g2)
         recalculate_stats()
-        await message.answer(f"✅ Результат матча {team1} {g1}:{g2} {team2} записан!")
-        await state.finish()
-        unplayed = get_unplayed_matches()
-        if not unplayed:
-            await message.answer("🎉 ПОЗДРАВЛЯЮ! Все матчи сыграны! Турнир завершён!")
+        await update.message.reply_text(f"✅ {team1} {g1}:{g2} {team2} — записано!")
+        remaining = len(get_unplayed_matches())
+        if remaining == 0:
+            await update.message.reply_text("🎉 ТУРНИР ЗАВЕРШЁН!")
         else:
-            remaining = len(unplayed)
-            await message.answer(f"📋 Осталось несыгранных матчей: {remaining}")
-    except ValueError:
-        await message.answer("❌ Неверный формат! Пожалуйста, введите счёт в формате X:Y, например, 2:1")
+            await update.message.reply_text(f"📋 Осталось матчей: {remaining}")
+        return ConversationHandler.END
+    except:
+        await update.message.reply_text("❌ Неверный формат! Используйте X:Y (например, 2:1)")
+        return WAITING_FOR_GOALS
+
+async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.id != ADMIN_ID:
+        await update.message.reply_text("⛔ Нет прав!")
+        return
+    match_results.clear()
+    init_teams()
+    await update.message.reply_text("🔄 Все данные сброшены!")
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Отменено.", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🤖 КОМАНДЫ:\n"
+        "/start - таблица\n"
+        "/schedule - расписание\n"
+        "/add_result - записать результат\n"
+        "/reset - сброс (админ)\n"
+        "/help - помощь\n\n"
+        "Как записать результат:\n"
+        "1. /add_result\n"
+        "2. Выбрать матч\n"
+        "3. Ввести X:Y"
+    )
+
+# --- ЗАПУСК ---
+def main():
+    app = Application.builder().token(BOT_TOKEN).build()
+    
+    conv = ConversationHandler(
+        entry_points=[CommandHandler("add_result", add_result)],
+        states={
+            WAITING_FOR_MATCH: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_match)],
+            WAITING_FOR_GOALS: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_goals)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("schedule", schedule))
+    app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(conv)
+    
+    app.run_polling()
 
 if __name__ == "__main__":
-    from aiogram import executor
-    executor.start_polling(dp, skip_updates=True)
+    main()
