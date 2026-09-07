@@ -1,13 +1,9 @@
 import logging
-import csv
-import io
-import os
-from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ← ВСТАВЬТЕ РЕАЛЬНЫЙ ТОКЕН
+BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"
 ADMIN_ID = 159790549
 # --- КОНЕЦ НАСТРОЙКИ ---
 
@@ -105,12 +101,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sorted_teams = sorted(tournament_data.items(), 
                          key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     
+    # Формируем таблицу в виде компактного текста
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
-    # Шапка таблицы с фиксированной шириной столбцов
+    # Шапка
     table += "<code>"
-    table += f"{'Команда':<10} {'И':>2} {'О':>2} {'З':>2} {'П':>2} {'±':>3} {'В':>2} {'Н':>2} {'П':>2}\n"
-    table += "─────────────────────────────────────\n"
+    table += "Команда  И О З П  ± В Н П\n"
+    table += "───────────────────────\n"
     
     for i, (team, stats) in enumerate(sorted_teams):
         diff = stats['goals_for'] - stats['goals_against']
@@ -133,12 +130,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             diff_str = str(diff)
         
-        # Название команды с фиксированной шириной 10 символов
-        # Обрезаем до 8 символов, если длиннее
-        team_display = team[:8] if len(team) > 8 else team
+        # Сокращаем название до 5 символов (без точек)
+        team_short = team[:5]
         
-        # Добавляем смайл и название с выравниванием
-        table += f"{medal} {team_display:<10} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>3} {stats['wins']:>2} {stats['draws']:>2} {stats['losses']:>2}\n"
+        table += f"{medal} {team_short:<6} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>3} {stats['wins']:>2} {stats['draws']:>2} {stats['losses']:>2}\n"
     
     table += "</code>"
     
@@ -146,7 +141,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total = len(SCHEDULE)
     table += f"\n📊 Сыграно: <b>{played}/{total}</b>"
     
-    table += "\n\n⚽ <i>/add_result</i> | 📅 <i>/schedule</i>"
+    table += "\n\n⚽ <i>/add_result</i>  |  📅 <i>/schedule</i>"
     
     await update.message.reply_text(table, parse_mode='HTML')
 
@@ -161,7 +156,7 @@ async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
             resting = get_resting_team(tour)
             text += f"\n🏆 <b>ТУР {tour}</b>\n"
             if resting:
-                text += f"🚬 {resting} <i>(отдыхает)</i>\n"
+                text += f"🚬 {resting} (отдыхает)\n"
         
         if (tour, team1, team2) in match_results:
             g1, g2 = match_results[(tour, team1, team2)]
@@ -182,7 +177,7 @@ async def add_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not unplayed:
         await update.message.reply_text("🎉 Все матчи сыграны! Турнир завершён!")
         return ConversationHandler.END
-    buttons = [[KeyboardButton(text=f"ТУР {t}: {t1} — {t2}")] for t, t1, t2 in unplayed]
+    buttons = [[ReplyKeyboardButton(text=f"ТУР {t}: {t1} — {t2}")] for t, t1, t2 in unplayed]
     keyboard = ReplyKeyboardMarkup(buttons, resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text("📋 Выберите матч:", reply_markup=keyboard)
     return WAITING_FOR_MATCH
