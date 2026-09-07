@@ -14,7 +14,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 from aiogram.utils.executor import start_polling
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "8821624488:AAGEWgFk1PJro7Va1Ipz1LS1Pt08eQAhjaM"
+BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"
 ADMIN_ID = 159790549
 # --- КОНЕЦ НАСТРОЙКИ ---
 
