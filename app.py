@@ -103,39 +103,73 @@ def recalculate_stats():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     recalculate_stats()
-    output = io.StringIO()
-    writer = csv.writer(output, delimiter=';')
-    writer.writerow(["Команда", "Игры", "Очки", "Забито", "Пропущено", "Разница", "В", "Н", "П"])
-    sorted_teams = sorted(tournament_data.items(), key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
-    for team, stats in sorted_teams:
+    
+    # Сортируем команды
+    sorted_teams = sorted(tournament_data.items(), 
+                         key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
+    
+    # Создаём заголовок
+    table = "🏆 <b>ТУРНИРНАЯ ТАБЛИЦА</b>\n"
+    table += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    # Добавляем шапку таблицы
+    table += "<code>"
+    table += f"{'Команда':<12} {'И':<3} {'О':<3} {'З':<3} {'П':<3} {'±':<3} {'В':<2} {'Н':<2} {'П':<2}\n"
+    table += "─────────────────────────────────\n"
+    
+    # Добавляем каждую команду
+    for i, (team, stats) in enumerate(sorted_teams):
         diff = stats['goals_for'] - stats['goals_against']
-        writer.writerow([team, stats['matches'], stats['points'], stats['goals_for'], stats['goals_against'], diff, stats['wins'], stats['draws'], stats['losses']])
-    csv_content = output.getvalue()
-    output.close()
-    with open('table.csv', 'w', encoding='utf-8-sig') as f:
-        f.write(csv_content)
+        # Эмодзи для первых трёх мест
+        medal = ""
+        if i == 0:
+            medal = "🥇 "
+        elif i == 1:
+            medal = "🥈 "
+        elif i == 2:
+            medal = "🥉 "
+        
+        table += f"{medal}{team:<10} {stats['matches']:>2}  {stats['points']:>2}  {stats['goals_for']:>2}  {stats['goals_against']:>2}  {diff:>3}  {stats['wins']:>1}  {stats['draws']:>1}  {stats['losses']:>1}\n"
+    
+    table += "</code>"
+    
+    # Информация о сыгранных матчах
     played = len(get_played_matches())
     total = len(SCHEDULE)
-    caption = f"📊 ТУРНИРНАЯ ТАБЛИЦА\nСыграно матчей: {played}/{total}"
-    await update.message.reply_document(document=open('table.csv', 'rb'), filename='table.csv', caption=caption)
-    os.remove('table.csv')
+    table += f"\n📊 Сыграно матчей: <b>{played}/{total}</b>"
+    
+    # Добавляем красивый футер
+    table += "\n\n⚽ <i>Чтобы записать результат, используй /add_result</i>"
+    
+    await update.message.reply_text(table, parse_mode='HTML')
 
 async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = "📅 РАСПИСАНИЕ ТУРНИРА\n\n"
+    text = "📅 <b>РАСПИСАНИЕ ТУРНИРА</b>\n"
+    text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    
     current_tour = 0
     for tour, team1, team2 in SCHEDULE:
         if tour != current_tour:
             current_tour = tour
             resting = get_resting_team(tour)
-            text += f"\n🏆 ТУР {tour} —\n"
+            text += f"\n🏆 <b>ТУР {tour}</b>\n"
             if resting:
-                text += f"🚬 {resting} (отдыхает)\n"
+                text += f"🚬 {resting} <i>(отдыхает)</i>\n"
+        
         if (tour, team1, team2) in match_results:
             g1, g2 = match_results[(tour, team1, team2)]
-            text += f"   • {team1} — {team2} {g1}-{g2} ✅\n"
+            # Эмодзи для результата
+            if g1 > g2:
+                result = f"✅ {team1} <b>{g1}</b> — {team2} <b>{g2}</b>"
+            elif g1 < g2:
+                result = f"✅ {team1} <b>{g1}</b> — {team2} <b>{g2}</b>"
+            else:
+                result = f"🤝 {team1} <b>{g1}</b> — {team2} <b>{g2}</b>"
+            text += f"   • {result}\n"
         else:
-            text += f"   • {team1} — {team2} ⏳\n"
-    await update.message.reply_text(text)
+            text += f"   • ⏳ {team1} — {team2}\n"
+    
+    await update.message.reply_text(text, parse_mode='HTML')
 
 async def add_result(update: Update, context: ContextTypes.DEFAULT_TYPE):
     unplayed = get_unplayed_matches()
@@ -198,18 +232,21 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🤖 КОМАНДЫ:\n"
-        "/start - таблица\n"
-        "/schedule - расписание\n"
-        "/add_result - записать результат\n"
-        "/reset - сброс (админ)\n"
-        "/help - помощь\n\n"
-        "Как записать результат:\n"
-        "1. /add_result\n"
-        "2. Выбрать матч\n"
-        "3. Ввести X:Y"
-    )
+    text = """
+🤖 <b>Команды бота:</b>
+
+/start - показать турнирную таблицу
+/schedule - показать расписание всех матчей
+/add_result - записать результат матча
+/reset - сбросить все данные (только для админа)
+/help - показать это сообщение
+
+📝 <b>Как записать результат:</b>
+1. Нажмите /add_result
+2. Выберите матч из списка
+3. Введите счёт в формате X:Y (например, 2:1)
+    """
+    await update.message.reply_text(text, parse_mode='HTML')
 
 # --- ЗАПУСК ---
 def main():
