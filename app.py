@@ -112,34 +112,40 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     table = "🏆 <b>ТУРНИРНАЯ ТАБЛИЦА</b>\n"
     table += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
     
-    # Добавляем шапку таблицы
+    # Добавляем шапку таблицы (короткие названия колонок для телефона)
     table += "<code>"
-    table += f"{'Команда':<12} {'И':<3} {'О':<3} {'З':<3} {'П':<3} {'±':<3} {'В':<2} {'Н':<2} {'П':<2}\n"
+    table += f"{'Команда':<10} {'И':<2} {'О':<2} {'З':<2} {'П':<2} {'±':<2} {'В':<1} {'Н':<1} {'П':<1}\n"
     table += "─────────────────────────────────\n"
     
     # Добавляем каждую команду
     for i, (team, stats) in enumerate(sorted_teams):
         diff = stats['goals_for'] - stats['goals_against']
-        # Эмодзи для первых трёх мест
-        medal = ""
-        if i == 0:
-            medal = "🥇 "
-        elif i == 1:
-            medal = "🥈 "
-        elif i == 2:
-            medal = "🥉 "
         
-        table += f"{medal}{team:<10} {stats['matches']:>2}  {stats['points']:>2}  {stats['goals_for']:>2}  {stats['goals_against']:>2}  {diff:>3}  {stats['wins']:>1}  {stats['draws']:>1}  {stats['losses']:>1}\n"
+        # Смайлы для мест
+        if i == 0:
+            medal = "🥇"
+        elif i == 1:
+            medal = "🥈"
+        elif i == 2:
+            medal = "🥉"
+        elif i == 3:
+            medal = "🍔"  # 4-е место — гамбургер
+        else:
+            medal = "🦴"  # 5-е место — кость
+        
+        # Обрезаем название до 8 символов, если длинное
+        team_short = team[:8] if len(team) > 8 else team
+        table += f"{medal} {team_short:<8} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff:>3} {stats['wins']:>1} {stats['draws']:>1} {stats['losses']:>1}\n"
     
     table += "</code>"
     
     # Информация о сыгранных матчах
     played = len(get_played_matches())
     total = len(SCHEDULE)
-    table += f"\n📊 Сыграно матчей: <b>{played}/{total}</b>"
+    table += f"\n📊 Сыграно: <b>{played}/{total}</b>"
     
     # Добавляем красивый футер
-    table += "\n\n⚽ <i>Чтобы записать результат, используй /add_result</i>"
+    table += "\n\n⚽ <i>Записать результат: /add_result</i>"
     
     await update.message.reply_text(table, parse_mode='HTML')
 
@@ -158,7 +164,6 @@ async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         if (tour, team1, team2) in match_results:
             g1, g2 = match_results[(tour, team1, team2)]
-            # Эмодзи для результата
             if g1 > g2:
                 result = f"✅ {team1} <b>{g1}</b> — {team2} <b>{g2}</b>"
             elif g1 < g2:
@@ -235,16 +240,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
 🤖 <b>Команды бота:</b>
 
-/start - показать турнирную таблицу
-/schedule - показать расписание всех матчей
-/add_result - записать результат матча
-/reset - сбросить все данные (только для админа)
-/help - показать это сообщение
+/start - турнирная таблица
+/schedule - расписание матчей
+/add_result - записать результат
+/reset - сброс данных (админ)
+/help - помощь
 
 📝 <b>Как записать результат:</b>
-1. Нажмите /add_result
-2. Выберите матч из списка
-3. Введите счёт в формате X:Y (например, 2:1)
+1. /add_result
+2. Выбрать матч
+3. Ввести X:Y (например, 2:1)
     """
     await update.message.reply_text(text, parse_mode='HTML')
 
