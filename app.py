@@ -103,8 +103,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
+    # Таблица в моноширинном формате
     table += "<code>"
-    # Заголовки: Команда И В Н П З П ± О
     table += "Команда И В Н П З П ± О\n"
     table += "────────────────────────\n"
     
