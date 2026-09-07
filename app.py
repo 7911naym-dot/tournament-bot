@@ -12,9 +12,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 import csv
 import io
 
-# --- НАСТРОЙКА: ВСТАВЬТЕ СВОЙ ТОКЕН ---
 BOT_TOKEN = "8821624488:AAGEWgFk1PJro7Va1Ipz1LS1Pt08eQAhjaM"
-# --- НАСТРОЙКА ЗАВЕРШЕНА ---
 
 logging.basicConfig(level=logging.INFO)
 
@@ -148,7 +146,7 @@ async def show_schedule(message: Message):
 
 @dp.message_handler(Command("reset"))
 async def reset_data(message: Message):
-    admin_id = 7911
+    admin_id = 159790549
     if message.from_user.id != admin_id:
         await message.answer("⛔ У вас нет прав для этой команды.")
         return
