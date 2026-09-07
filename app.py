@@ -7,16 +7,14 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardR
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ВСТАВЬТЕ НОВЫЙ ТОКЕН
-ADMIN_ID = 159790549  # ВАШ TELEGRAM ID
+BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ← ВСТАВЬТЕ РЕАЛЬНЫЙ ТОКЕН
+ADMIN_ID = 159790549
 # --- КОНЕЦ НАСТРОЙКИ ---
 
 logging.basicConfig(level=logging.INFO)
 
-# Состояния разговора
 WAITING_FOR_MATCH, WAITING_FOR_GOALS = range(2)
 
-# Данные турнира
 TEAMS = ["Белые", "Красные", "Фиолетовые", "Зелёные", "Черные"]
 
 SCHEDULE = [
@@ -104,19 +102,16 @@ def recalculate_stats():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     recalculate_stats()
     
-    # Сортируем команды
     sorted_teams = sorted(tournament_data.items(), 
                          key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     
-    # Заголовок
     table = "🏆 <b>EL Tempo cup</b> 🏆\n\n"
     
-    # Шапка таблицы (адаптивная, компактная)
+    # Шапка таблицы с фиксированной шириной столбцов
     table += "<code>"
-    table += f"{'#':<2} {'Команда':<8} {'И':<2} {'О':<2} {'З':<2} {'П':<2} {'±':<3} {'В':<1} {'Н':<1} {'П':<1}\n"
+    table += f"{'Команда':<10} {'И':>2} {'О':>2} {'З':>2} {'П':>2} {'±':>3} {'В':>2} {'Н':>2} {'П':>2}\n"
     table += "─────────────────────────────────────\n"
     
-    # Добавляем каждую команду
     for i, (team, stats) in enumerate(sorted_teams):
         diff = stats['goals_for'] - stats['goals_against']
         
@@ -138,32 +133,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             diff_str = str(diff)
         
-        # Обрезаем название до 8 символов
-        team_short = team[:8] if len(team) > 8 else team
+        # Название команды с фиксированной шириной 10 символов
+        # Обрезаем до 8 символов, если длиннее
+        team_display = team[:8] if len(team) > 8 else team
         
-        # Формируем строку
-        table += f"{medal} {team_short:<8} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>3} {stats['wins']:>1} {stats['draws']:>1} {stats['losses']:>1}\n"
-        
-        # Разделитель после лидера
-        if i == 0:
-            table += "─────────────────────────────────────\n"
+        # Добавляем смайл и название с выравниванием
+        table += f"{medal} {team_display:<10} {stats['matches']:>2} {stats['points']:>2} {stats['goals_for']:>2} {stats['goals_against']:>2} {diff_str:>3} {stats['wins']:>2} {stats['draws']:>2} {stats['losses']:>2}\n"
     
     table += "</code>"
     
-    # Информация о сыгранных матчах
     played = len(get_played_matches())
     total = len(SCHEDULE)
     table += f"\n📊 Сыграно: <b>{played}/{total}</b>"
     
-    # Футер
-    table += "\n\n⚽ <i>Записать результат: /add_result</i>"
-    table += "\n📅 <i>Расписание: /schedule</i>"
+    table += "\n\n⚽ <i>/add_result</i> | 📅 <i>/schedule</i>"
     
     await update.message.reply_text(table, parse_mode='HTML')
 
 async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = "📅 <b>РАСПИСАНИЕ ТУРНИРА</b>\n"
-    text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    text = "📅 <b>РАСПИСАНИЕ</b>\n"
+    text += "━━━━━━━━━━━━━━━━━━━━\n"
     
     current_tour = 0
     for tour, team1, team2 in SCHEDULE:
@@ -250,22 +239,21 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = """
-🤖 <b>Команды бота:</b>
+🤖 <b>Команды:</b>
 
-/start - турнирная таблица
-/schedule - расписание матчей
+/start - таблица
+/schedule - расписание
 /add_result - записать результат
-/reset - сброс данных (админ)
+/reset - сброс (админ)
 /help - помощь
 
-📝 <b>Как записать результат:</b>
+📝 <b>Запись результата:</b>
 1. /add_result
 2. Выбрать матч
 3. Ввести X:Y (например, 2:1)
     """
     await update.message.reply_text(text, parse_mode='HTML')
 
-# --- ЗАПУСК ---
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     
