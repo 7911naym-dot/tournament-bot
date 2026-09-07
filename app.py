@@ -7,7 +7,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardR
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "НОВЫЙ_ТОКЕН_ОТ_BOTFATHER"  # ВСТАВЬТЕ НОВЫЙ ТОКЕН
+BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ВСТАВЬТЕ НОВЫЙ ТОКЕН
 ADMIN_ID = 159790549  # ВАШ TELEGRAM ID
 # --- КОНЕЦ НАСТРОЙКИ ---
 
