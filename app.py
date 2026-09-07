@@ -3,7 +3,7 @@ import logging
 import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
-from aiogram.types import Message, FSInputFile
+from aiogram.types import Message, InputFile
 from aiogram.dispatcher import Dispatcher
 from aiogram.dispatcher.filters import Command
 from aiogram.dispatcher.fsm.context import FSMContext
@@ -12,7 +12,10 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 import csv
 import io
 
+# --- НАСТРОЙКА: ВСТАВЬТЕ СВОЙ ТОКЕН ---
 BOT_TOKEN = "8821624488:AAGEWgFk1PJro7Va1Ipz1LS1Pt08eQAhjaM"
+ADMIN_ID = 159790549  # ← ВАШ TELEGRAM ID
+# --- НАСТРОЙКА ЗАВЕРШЕНА ---
 
 logging.basicConfig(level=logging.INFO)
 
@@ -110,7 +113,7 @@ async def show_table(message: Message):
     played = len(get_played_matches())
     total = len(SCHEDULE)
     caption = f"📊 ТУРНИРНАЯ ТАБЛИЦА\nСыграно матчей: {played}/{total}"
-    await message.answer_document(FSInputFile('table.csv'), caption=caption)
+    await message.answer_document(InputFile('table.csv'), caption=caption)
     os.remove('table.csv')
 
 @dp.message_handler(Command("add_result"))
@@ -146,8 +149,7 @@ async def show_schedule(message: Message):
 
 @dp.message_handler(Command("reset"))
 async def reset_data(message: Message):
-    admin_id = 159790549
-    if message.from_user.id != admin_id:
+    if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ У вас нет прав для этой команды.")
         return
     global tournament_data, match_results
@@ -155,6 +157,24 @@ async def reset_data(message: Message):
     for team in TEAMS:
         tournament_data[team] = {"goals_for": 0, "goals_against": 0, "points": 0, "matches": 0, "wins": 0, "draws": 0, "losses": 0}
     await message.answer("🔄 Все данные сброшены!")
+
+@dp.message_handler(Command("help"))
+async def help_command(message: Message):
+    text = """
+🤖 **Команды бота:**
+
+/start - показать турнирную таблицу
+/schedule - показать расписание всех матчей
+/add_result - записать результат матча
+/reset - сбросить все данные (только для админа)
+/help - показать это сообщение
+
+📝 **Как записать результат:**
+1. Нажмите /add_result
+2. Выберите матч из списка
+3. Введите счёт в формате X:Y (например, 2:1)
+"""
+    await message.answer(text)
 
 def recalculate_stats():
     for team in TEAMS:
