@@ -1,28 +1,31 @@
-import asyncio
 import logging
 import os
+import csv
+import io
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.types import Message, InputFile
 from aiogram.dispatcher import Dispatcher
 from aiogram.dispatcher.filters import Command
-from aiogram.dispatcher.fsm.context import FSMContext
-from aiogram.dispatcher.fsm.state import StatesGroup, State
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-import csv
-import io
+from aiogram.utils.executor import start_polling
 
-# --- НАСТРОЙКА: ВСТАВЬТЕ СВОЙ ТОКЕН ---
+# --- НАСТРОЙКА ---
 BOT_TOKEN = "8821624488:AAGEWgFk1PJro7Va1Ipz1LS1Pt08eQAhjaM"
-ADMIN_ID = 159790549  # ← ВАШ TELEGRAM ID
-# --- НАСТРОЙКА ЗАВЕРШЕНА ---
+ADMIN_ID = 159790549
+# --- КОНЕЦ НАСТРОЙКИ ---
 
 logging.basicConfig(level=logging.INFO)
 
+storage = MemoryStorage()
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher(bot, storage=storage)
 dp.middleware.setup(LoggingMiddleware())
 
+# Команды
 TEAMS = ["Белые", "Красные", "Фиолетовые", "Зелёные", "Черные"]
 
 SCHEDULE = [
@@ -95,6 +98,38 @@ def get_unplayed_matches():
             unplayed.append((tour, team1, team2))
     return unplayed
 
+def recalculate_stats():
+    for team in TEAMS:
+        tournament_data[team] = {
+            "goals_for": 0,
+            "goals_against": 0,
+            "points": 0,
+            "matches": 0,
+            "wins": 0,
+            "draws": 0,
+            "losses": 0
+        }
+    for (tour, team1, team2), (g1, g2) in match_results.items():
+        tournament_data[team1]['goals_for'] += g1
+        tournament_data[team1]['goals_against'] += g2
+        tournament_data[team1]['matches'] += 1
+        tournament_data[team2]['goals_for'] += g2
+        tournament_data[team2]['goals_against'] += g1
+        tournament_data[team2]['matches'] += 1
+        if g1 > g2:
+            tournament_data[team1]['points'] += 3
+            tournament_data[team1]['wins'] += 1
+            tournament_data[team2]['losses'] += 1
+        elif g1 < g2:
+            tournament_data[team2]['points'] += 3
+            tournament_data[team2]['wins'] += 1
+            tournament_data[team1]['losses'] += 1
+        else:
+            tournament_data[team1]['points'] += 1
+            tournament_data[team2]['points'] += 1
+            tournament_data[team1]['draws'] += 1
+            tournament_data[team2]['draws'] += 1
+
 @dp.message_handler(Command("start"))
 async def show_table(message: Message):
     recalculate_stats()
@@ -105,7 +140,8 @@ async def show_table(message: Message):
                          key=lambda x: (-x[1]['points'], -(x[1]['goals_for'] - x[1]['goals_against'])))
     for team, stats in sorted_teams:
         diff = stats['goals_for'] - stats['goals_against']
-        writer.writerow([team, stats['matches'], stats['points'], stats['goals_for'], stats['goals_against'], diff, stats['wins'], stats['draws'], stats['losses']])
+        writer.writerow([team, stats['matches'], stats['points'], stats['goals_for'], stats['goals_against'], 
+                        diff, stats['wins'], stats['draws'], stats['losses']])
     csv_content = output.getvalue()
     output.close()
     with open('table.csv', 'w', encoding='utf-8-sig') as f:
@@ -155,7 +191,15 @@ async def reset_data(message: Message):
     global tournament_data, match_results
     match_results = {}
     for team in TEAMS:
-        tournament_data[team] = {"goals_for": 0, "goals_against": 0, "points": 0, "matches": 0, "wins": 0, "draws": 0, "losses": 0}
+        tournament_data[team] = {
+            "goals_for": 0,
+            "goals_against": 0,
+            "points": 0,
+            "matches": 0,
+            "wins": 0,
+            "draws": 0,
+            "losses": 0
+        }
     await message.answer("🔄 Все данные сброшены!")
 
 @dp.message_handler(Command("help"))
@@ -176,30 +220,6 @@ async def help_command(message: Message):
 """
     await message.answer(text)
 
-def recalculate_stats():
-    for team in TEAMS:
-        tournament_data[team] = {"goals_for": 0, "goals_against": 0, "points": 0, "matches": 0, "wins": 0, "draws": 0, "losses": 0}
-    for (tour, team1, team2), (g1, g2) in match_results.items():
-        tournament_data[team1]['goals_for'] += g1
-        tournament_data[team1]['goals_against'] += g2
-        tournament_data[team1]['matches'] += 1
-        tournament_data[team2]['goals_for'] += g2
-        tournament_data[team2]['goals_against'] += g1
-        tournament_data[team2]['matches'] += 1
-        if g1 > g2:
-            tournament_data[team1]['points'] += 3
-            tournament_data[team1]['wins'] += 1
-            tournament_data[team2]['losses'] += 1
-        elif g1 < g2:
-            tournament_data[team2]['points'] += 3
-            tournament_data[team2]['wins'] += 1
-            tournament_data[team1]['losses'] += 1
-        else:
-            tournament_data[team1]['points'] += 1
-            tournament_data[team2]['points'] += 1
-            tournament_data[team1]['draws'] += 1
-            tournament_data[team2]['draws'] += 1
-
 @dp.message_handler(state=ResultStates.waiting_for_match)
 async def process_match_selection(message: Message, state: FSMContext):
     selected_text = message.text
@@ -215,7 +235,10 @@ async def process_match_selection(message: Message, state: FSMContext):
             if t == tour and t1 == team1 and t2 == team2:
                 if (tour, team1, team2) not in match_results:
                     await state.update_data(tour=tour, team1=team1, team2=team2)
-                    await message.answer(f"✅ Введите счёт для матча {team1} — {team2} в формате: X:Y (например, 2:1)", reply_markup=ReplyKeyboardRemove())
+                    await message.answer(
+                        f"✅ Введите счёт для матча {team1} — {team2} в формате: X:Y (например, 2:1)",
+                        reply_markup=ReplyKeyboardRemove()
+                    )
                     await state.set_state(ResultStates.waiting_for_goals)
                     match_found = True
                 else:
