@@ -23,15 +23,14 @@ dp = Dispatcher(storage=storage)
 # --- ТУРНИР: 3 КОМАНДЫ ---
 TEAMS = ["Белые", "Синие", "Красные"]
 
-# Возможные пары матчей (каждая команда играет с каждой)
+# Все возможные пары матчей
 MATCH_PAIRS = [
     ("Белые", "Синие"),
     ("Белые", "Красные"),
     ("Синие", "Красные"),
 ]
 
-# match_results: список всех сыгранных матчей
-# каждый элемент: {"team1": ..., "team2": ..., "g1": ..., "g2": ...}
+# Список всех сыгранных матчей (неограниченное количество)
 match_results = []
 
 class ResultStates(StatesGroup):
@@ -113,7 +112,7 @@ def get_table_text():
     return table
 
 def get_match_keyboard():
-    """Создаёт клавиатуру со всеми возможными парами для выбора"""
+    """Клавиатура со всеми возможными парами"""
     buttons = []
     for team1, team2 in MATCH_PAIRS:
         buttons.append([KeyboardButton(text=f"{team1} — {team2}")])
@@ -124,9 +123,8 @@ def get_match_keyboard():
 @dp.message(Command("start"))
 async def start_command(message: Message, state: FSMContext):
     table = get_table_text()
-    keyboard = get_match_keyboard()
-    
     await message.answer(table, parse_mode='HTML')
+    keyboard = get_match_keyboard()
     await message.answer("📋 Выберите матч для записи результата:", reply_markup=keyboard)
     await state.set_state(ResultStates.waiting_for_match)
 
@@ -185,7 +183,7 @@ async def help_command(message: Message):
 3. Введите счёт в формате X:Y (например, 2:1)
 4. Бот покажет таблицу и снова предложит выбрать матч
 
-♻️ Количество игр не ограничено — можно играть сколько угодно!
+♻️ Количество игр не ограничено!
     """
     await message.answer(text, parse_mode='HTML')
 
@@ -222,7 +220,7 @@ async def process_goals(message: Message, state: FSMContext):
         team1 = data['team1']
         team2 = data['team2']
         
-        # Добавляем матч в список
+        # Добавляем матч в список (неограниченно)
         match_results.append({
             "team1": team1,
             "team2": team2,
@@ -238,7 +236,7 @@ async def process_goals(message: Message, state: FSMContext):
         
         # Снова предлагаем выбрать матч
         keyboard = get_match_keyboard()
-        await message.answer("📋 Выберите следующий матч для записи результата:", reply_markup=keyboard)
+        await message.answer("📋 Выберите следующий матч:", reply_markup=keyboard)
         await state.set_state(ResultStates.waiting_for_match)
         
     except ValueError:
