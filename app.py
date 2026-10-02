@@ -1,20 +1,17 @@
 import asyncio
 import logging
-import os
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
-import csv
-import io
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ← ВАШ ТОКЕН
-ADMIN_ID = 159790549  # ← ВАШ TELEGRAM ID
+BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"
+ADMIN_ID = 159790549
 # --- КОНЕЦ НАСТРОЙКИ ---
 
 logging.basicConfig(level=logging.INFO)
@@ -33,11 +30,11 @@ MATCH_PAIRS = [
     ("Синие", "Красные"),
 ]
 
-# match_results: ключ = (team1, team2) в алфавитном порядке, значение = (g1, g2)
-# Чтобы не было путаницы: сохраняем как (team1, team2) в порядке пары из MATCH_PAIRS
+# match_results: ключ = (team1, team2), значение = (g1, g2)
 match_results = {}
 
 class ResultStates(StatesGroup):
+    waiting_for_match = State()
     waiting_for_goals = State()
 
 tournament_data = {}
@@ -80,10 +77,8 @@ def recalculate_stats():
             tournament_data[team1]['draws'] += 1
             tournament_data[team2]['draws'] += 1
 
-# --- КОМАНДЫ БОТА ---
-
-@dp.message(Command("start"))
-async def show_table(message: Message):
+def get_table_text():
+    """Формирует текст турнирной таблицы"""
     recalculate_stats()
     
     sorted_teams = sorted(tournament_data.items(), 
@@ -107,14 +102,53 @@ async def show_table(message: Message):
     table += "</code>"
     
     played = len(match_results)
-    table += f"\n📊 Сыграно матчей: <b>{played}</b>"
-    table += "\n\n⚽ <i>/add_result</i> | 📅 <i>/schedule</i>"
+    total = len(MATCH_PAIRS)
+    table += f"\n📊 Сыграно матчей: <b>{played}/{total}</b>"
     
+    return table
+
+def get_next_match_keyboard():
+    """Создаёт клавиатуру с несыгранными матчами"""
+    buttons = []
+    for team1, team2 in MATCH_PAIRS:
+        if (team1, team2) not in match_results:
+            buttons.append([KeyboardButton(text=f"{team1} — {team2}")])
+    
+    if not buttons:
+        return None
+    
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
+
+# --- КОМАНДЫ БОТА ---
+
+@dp.message(Command("start"))
+async def show_table(message: Message):
+    table = get_table_text()
+    keyboard = get_next_match_keyboard()
+    
+    if keyboard:
+        table += "\n\n📋 Выберите матч для записи результата:"
+        await message.answer(table, reply_markup=keyboard, parse_mode='HTML')
+        await dp.fsm.get_context(bot, message.chat.id, message.message_id).set_state(ResultStates.waiting_for_match)
+    else:
+        table += "\n\n🎉 Все матчи сыграны! Турнир завершён!"
+        await message.answer(table, parse_mode='HTML')
+
+@dp.message(Command("add_result"))
+async def add_result(message: Message, state: FSMContext):
+    keyboard = get_next_match_keyboard()
+    if not keyboard:
+        await message.answer("🎉 Все матчи уже сыграны! Турнир завершён!")
+        return
+    
+    table = get_table_text()
     await message.answer(table, parse_mode='HTML')
+    await message.answer("📋 Выберите матч для записи результата:", reply_markup=keyboard)
+    await state.set_state(ResultStates.waiting_for_match)
 
 @dp.message(Command("schedule"))
 async def show_schedule(message: Message):
-    text = "📅 <b>РАСПИСАНИЕ ТУРНИРА</b>\n"
+    text = "📅 <b>РАСПИСАНИЕ МАТЧЕЙ</b>\n"
     text += "━━━━━━━━━━━━━━━━━━━━\n"
     
     for team1, team2 in MATCH_PAIRS:
@@ -131,21 +165,6 @@ async def show_schedule(message: Message):
             text += f"   • ⏳ Матч ещё не сыгран\n"
     
     await message.answer(text, parse_mode='HTML')
-
-@dp.message(Command("add_result"))
-async def ask_match(message: Message):
-    # Создаём кнопки для выбора пары
-    buttons = []
-    for team1, team2 in MATCH_PAIRS:
-        if (team1, team2) not in match_results:
-            buttons.append([KeyboardButton(text=f"{team1} — {team2}")])
-    
-    if not buttons:
-        await message.answer("🎉 ПОЗДРАВЛЯЮ! Все матчи уже сыграны! Турнир завершён!")
-        return
-    
-    keyboard = ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-    await message.answer("📋 Выберите матч для записи результата:", reply_markup=keyboard)
 
 @dp.message(Command("reset"))
 async def reset_data(message: Message):
@@ -169,66 +188,66 @@ async def help_command(message: Message):
 /help - помощь
 
 📝 <b>Как записать результат:</b>
-1. Нажмите /add_result
+1. Нажмите /start или /add_result
 2. Выберите пару команд из кнопок
 3. Введите счёт в формате X:Y (например, 2:1)
+4. После ввода счёта бот покажет таблицу и предложит следующий матч
     """
     await message.answer(text, parse_mode='HTML')
 
-# --- ОБРАБОТЧИК ВЫБОРА МАТЧА И ВВОДА СЧЁТА ---
+# --- ОБРАБОТЧИК ВЫБОРА МАТЧА ---
 
-@dp.message(lambda message: message.text and " — " in message.text and not message.text.startswith("/"))
-async def process_match_and_goals(message: Message, state: FSMContext):
+@dp.message(ResultStates.waiting_for_match)
+async def process_match_selection(message: Message, state: FSMContext):
     text = message.text.strip()
     
-    # Проверяем, это выбор матча или ввод счёта
-    if " — " in text and not any(char.isdigit() for char in text):
-        # Это выбор пары команд
-        for team1, team2 in MATCH_PAIRS:
-            if text == f"{team1} — {team2}":
-                if (team1, team2) in match_results:
-                    await message.answer("❌ Этот матч уже сыгран!")
-                    return
-                await state.update_data(team1=team1, team2=team2)
-                await message.answer(
-                    f"✅ Введите счёт для матча <b>{team1} — {team2}</b> в формате X:Y (например, 2:1)",
-                    reply_markup=ReplyKeyboardRemove(),
-                    parse_mode='HTML'
-                )
-                await state.set_state(ResultStates.waiting_for_goals)
+    for team1, team2 in MATCH_PAIRS:
+        if text == f"{team1} — {team2}":
+            if (team1, team2) in match_results:
+                await message.answer("❌ Этот матч уже сыгран!")
                 return
-        await message.answer("❌ Пожалуйста, выберите матч из списка.")
-        return
-    
-    # Проверяем, это ввод счёта
-    if ":" in text:
-        current_state = await state.get_state()
-        if current_state != ResultStates.waiting_for_goals.state:
-            await message.answer("❌ Сначала выберите матч командой /add_result")
+            await state.update_data(team1=team1, team2=team2)
+            await message.answer(
+                f"✅ Введите счёт для матча <b>{team1} — {team2}</b> в формате X:Y (например, 2:1)",
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode='HTML'
+            )
+            await state.set_state(ResultStates.waiting_for_goals)
             return
-        try:
-            goals = text.split(':')
-            if len(goals) != 2:
-                raise ValueError("Неверный формат")
-            g1 = int(goals[0])
-            g2 = int(goals[1])
-            data = await state.get_data()
-            team1 = data['team1']
-            team2 = data['team2']
-            match_results[(team1, team2)] = (g1, g2)
-            recalculate_stats()
-            await message.answer(f"✅ Результат матча {team1} {g1}:{g2} {team2} записан!")
+    
+    await message.answer("❌ Пожалуйста, выберите матч из списка.")
+
+# --- ОБРАБОТЧИК ВВОДА СЧЁТА ---
+
+@dp.message(ResultStates.waiting_for_goals)
+async def process_goals(message: Message, state: FSMContext):
+    try:
+        goals = message.text.split(':')
+        if len(goals) != 2:
+            raise ValueError("Неверный формат")
+        g1 = int(goals[0])
+        g2 = int(goals[1])
+        data = await state.get_data()
+        team1 = data['team1']
+        team2 = data['team2']
+        match_results[(team1, team2)] = (g1, g2)
+        
+        await message.answer(f"✅ Результат матча {team1} {g1}:{g2} {team2} записан!")
+        
+        # Показываем обновлённую таблицу
+        table = get_table_text()
+        await message.answer(table, parse_mode='HTML')
+        
+        # Проверяем, есть ли ещё матчи
+        keyboard = get_next_match_keyboard()
+        if keyboard:
+            await message.answer("📋 Выберите следующий матч:", reply_markup=keyboard)
+            await state.set_state(ResultStates.waiting_for_match)
+        else:
+            await message.answer("🎉 ТУРНИР ЗАВЕРШЁН! Все матчи сыграны!")
             await state.clear()
-            
-            # Показываем, сколько матчей осталось
-            remaining = 3 - len(match_results)
-            if remaining == 0:
-                await message.answer("🎉 ТУРНИР ЗАВЕРШЁН! Все матчи сыграны!")
-            else:
-                await message.answer(f"📋 Осталось матчей: {remaining}")
-        except ValueError:
-            await message.answer("❌ Неверный формат! Введите счёт в формате X:Y (например, 2:1)")
-        return
+    except ValueError:
+        await message.answer("❌ Неверный формат! Введите счёт в формате X:Y (например, 2:1)")
 
 async def main():
     await dp.start_polling(bot)
