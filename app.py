@@ -13,7 +13,7 @@ import csv
 import io
 
 # --- НАСТРОЙКА ---
-BOT_TOKEN = "8821624488:AAGEWgFk1PJro7Va1Ipz1LS1Pt08eQAhjaM"  # ← ВАШ ТОКЕН
+BOT_TOKEN = "8821624488:AAGEwGfk1PJrO7Va1Ipz1LSlPt08eQAhjaM"  # ← ВАШ ТОКЕН
 ADMIN_ID = 159790549  # ← ВАШ TELEGRAM ID
 # --- КОНЕЦ НАСТРОЙКИ ---
 
