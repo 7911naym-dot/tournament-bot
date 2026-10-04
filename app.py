@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -28,7 +30,7 @@ MATCH_PAIRS = [
 # Список всех сыгранных матчей (неограниченное количество)
 match_results = []
 
-# Временное хранилище выбранного матча (для каждого чата)
+# Временное хранилище выбранного матча (для каждого пользователя)
 pending_matches = {}
 
 tournament_data = {}
@@ -176,7 +178,7 @@ async def help_command(message: Message):
     """
     await message.answer(text, parse_mode='HTML')
 
-# --- ГЛАВНЫЙ ОБРАБОТЧИК ВСЕХ СООБЩЕНИЙ ---
+# --- ГЛАВНЫЙ ОБРАБОТЧИК СООБЩЕНИЙ ---
 
 @dp.message()
 async def handle_message(message: Message):
@@ -186,7 +188,6 @@ async def handle_message(message: Message):
     # Проверяем: это выбор матча?
     for team1, team2 in MATCH_PAIRS:
         if text == f"{team1} — {team2}":
-            # Сохраняем выбранный матч
             pending_matches[user_id] = {"team1": team1, "team2": team2}
             await message.answer(
                 f"✅ Введите счёт для матча <b>{team1} — {team2}</b> в формате X:Y (например, 2:1)",
@@ -215,16 +216,13 @@ async def handle_message(message: Message):
                 "g2": g2
             })
             
-            # Удаляем временный матч
             del pending_matches[user_id]
             
             await message.answer(f"✅ Результат матча {team1} {g1}:{g2} {team2} записан!")
             
-            # Показываем таблицу
             table = get_table_text()
             await message.answer(table, parse_mode='HTML')
             
-            # Снова предлагаем выбрать матч
             keyboard = get_match_keyboard()
             await message.answer("📋 Выберите следующий матч:", reply_markup=keyboard)
             
@@ -232,13 +230,31 @@ async def handle_message(message: Message):
             await message.answer("❌ Неверный формат! Введите счёт в формате X:Y (например, 2:1)")
         return
     
-    # Если ничего не подошло
     if user_id in pending_matches:
         await message.answer("❌ Введите счёт в формате X:Y (например, 2:1)")
     else:
         await message.answer("🤖 Используйте /start для начала работы или /help для списка команд.")
 
+# --- HTTP-СЕРВЕР ДЛЯ ПИНГА ---
+
+async def health_check(request):
+    return web.Response(text="OK", status=200)
+
+async def start_http_server():
+    app = web.Application()
+    app.router.add_get('/', health_check)
+    app.router.add_get('/health', health_check)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logging.info(f"✅ HTTP-сервер запущен на порту {port}")
+
 async def main():
+    # Запускаем HTTP-сервер в фоне
+    await start_http_server()
+    # Запускаем бота
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
