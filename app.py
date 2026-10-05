@@ -251,9 +251,16 @@ async def start_http_server():
     await site.start()
     logging.info(f"✅ HTTP-сервер запущен на порту {port}")
 
+# --- ЗАПУСК ---
+
 async def main():
-    # Запускаем HTTP-сервер в фоне
+    # Запускаем HTTP-сервер для пинга
     await start_http_server()
+    
+    # УДАЛЯЕМ ВЕБХУК (иначе polling не работает)
+    await bot.delete_webhook(drop_pending_updates=True)
+    logging.info("✅ Вебхук удалён, запускаем polling...")
+    
     # Запускаем бота
     await dp.start_polling(bot)
 
